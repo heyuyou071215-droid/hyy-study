@@ -54,12 +54,15 @@ export default {
       connecting = true;
       const endpoint = `https://${WORKSPACE_ID}.cn-beijing.maas.aliyuncs.com/api-ws/v1/realtime?model=${encodeURIComponent(MODEL)}`;
       let response;
+      const controller = new AbortController();
+      const handshakeTimer = setTimeout(() => controller.abort(), 15000);
       try {
         console.log("Connecting to Bailian realtime WebSocket");
         response = await fetch(endpoint, {
           headers: { Upgrade: "websocket", Authorization: `Bearer ${env.DASHSCOPE_API_KEY}` },
-          signal: AbortSignal.timeout(15000)
+          signal: controller.signal
         });
+        clearTimeout(handshakeTimer);
         console.log(`Bailian handshake HTTP ${response.status}`);
         if (!response.webSocket) throw new Error(`百炼连接失败（HTTP ${response.status}）`);
         upstream = response.webSocket;
@@ -68,8 +71,15 @@ export default {
           if (typeof event.data !== "string") return;
           let payload;
           try { payload = JSON.parse(event.data); } catch { return; }
+          if (payload.type === "session.created") {
+            console.log("Bailian session.created; sending session.update");
+            upstream.send(JSON.stringify({
+              type: "session.update",
+              session: { output_modalities: ["text"], translation: { language: "zh" } }
+            }));
+          }
           if (payload.type === "session.updated") send(browser, { type: "gateway.ready" });
-          if (payload.type === "session.created" || payload.type === "error") console.log(`Bailian event: ${payload.type}`);
+          if (payload.type === "session.updated" || payload.type === "error") console.log(`Bailian event: ${payload.type}`);
           if (payload.type === "session.finished") {
             send(browser, payload);
             safeClose(upstream); safeClose(browser);
@@ -90,11 +100,8 @@ export default {
           send(browser, { type: "gateway.error", message: "千问连接发生错误" });
           safeClose(browser, 1011, "Upstream error");
         });
-        upstream.send(JSON.stringify({
-          type: "session.update",
-          session: { output_modalities: ["text"], translation: { language: "zh" } }
-        }));
       } catch (error) {
+        clearTimeout(handshakeTimer);
         console.error("Bailian connection error", String(error?.message || error).slice(0, 160));
         send(browser, { type: "gateway.error", message: String(error?.message || "连接千问失败").slice(0, 120) });
         safeClose(browser, 1011, "Model connection failed");
