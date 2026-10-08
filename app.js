@@ -362,10 +362,10 @@
           }
         };
         recognition.onerror = (event) => {
-          const reason = event.error === "not-allowed" ? "麦克风权限被拒绝" : event.error === "no-speech" ? "暂未识别到讲话" : `语音识别中断：${event.error}`;
+          const reason = event.error === "not-allowed" ? "浏览器未允许语音输入（not-allowed）" : event.error === "service-not-allowed" ? "浏览器语音识别服务不可用（service-not-allowed）" : event.error === "no-speech" ? "暂未识别到讲话" : `语音识别中断：${event.error}`;
           if (event.error === "no-speech") liveRestartAttempts = 0;
           const help = event.error === "not-allowed" || event.error === "service-not-allowed"
-            ? "请在手机 Chrome 或 Edge 中直接打开网址，在系统权限和浏览器的网站设置中允许麦克风，然后刷新页面重试。部分应用内置浏览器不会授予网页麦克风权限。已识别的片段仍可导出。"
+            ? "可能是应用或网站麦克风权限被拦截，也可能是当前浏览器不允许网页使用语音识别服务。请复制网址到手机 Chrome 或 Edge 直接打开，允许系统与网站麦克风权限后重试。此错误无法仅凭网页判定是哪一级拦截。"
             : "检查网络和麦克风后可重新开始。已识别的英文会保存在当前浏览器，也可导出。";
           setLiveStatus(reason, help);
           if (event.error === "not-allowed" || event.error === "service-not-allowed" || event.error === "audio-capture") stopLive();
