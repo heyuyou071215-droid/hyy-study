@@ -5,7 +5,10 @@ const MAX_CHUNK_BASE64 = 32_000; // Less than one second of 16-kHz PCM16.
 const BYTES_PER_SECOND = 32_000;
 
 function send(ws, value) {
-  if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(value));
+  try {
+    if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(value));
+    else console.warn(`Client socket not open for ${value.type}: ${ws.readyState}`);
+  } catch (error) { console.error(`Client send failed for ${value.type}`, String(error?.message || error).slice(0, 120)); }
 }
 
 function safeClose(ws, code = 1000, reason = "") {
@@ -78,7 +81,10 @@ export default {
               session: { output_modalities: ["text"], translation: { language: "zh" } }
             }));
           }
-          if (payload.type === "session.updated") send(browser, { type: "gateway.ready" });
+          if (payload.type === "session.updated") {
+            console.log(`Sending gateway.ready; client socket state ${browser.readyState}`);
+            send(browser, { type: "gateway.ready" });
+          }
           if (payload.type === "session.updated" || payload.type === "error") console.log(`Bailian event: ${payload.type}`);
           if (payload.type === "session.finished") {
             send(browser, payload);

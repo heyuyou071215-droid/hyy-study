@@ -7,7 +7,7 @@
   const segments = [];
   const byItem = new Map();
   let socket = null, stream = null, context = null, source = null, processor = null, sink = null;
-  let wakeLock = null, timer = null, reconnectTimer = null, finishTimer = null;
+  let wakeLock = null, timer = null, reconnectTimer = null, finishTimer = null, readyTimer = null;
   let phase = "idle", sessionId = "", startedAt = 0, connectionStartedAt = 0;
   let reconnects = 0, gapStartedAt = 0, sentSeconds = 0, billedAudioTokens = 0, billedTextTokens = 0;
   let missedSeconds = 0, errorText = "", renderScheduled = false, utteranceCount = 0;
@@ -143,8 +143,10 @@
     if (data.type === "gateway.error") { setStatus("网关连接失败", String(data.message || "请稍后重试")); finalizeStop(); return; }
     if (data.type === "gateway.ready") {
       if (phase !== "connecting") return;
+      clearTimeout(readyTimer); readyTimer = null;
       if (gapStartedAt) { markGap((Date.now() - gapStartedAt) / 1000, "连接中断"); gapStartedAt = 0; }
       reconnects = 0; connectionStartedAt = Date.now();
+      setStatus("千问已连接 · 等待麦克风", "请在浏览器权限提示中允许麦克风");
       startMicrophone().catch(error => { setStatus("麦克风启动失败", error?.message || "请检查权限"); finalizeStop(); });
       return;
     }
@@ -155,11 +157,14 @@
     if (phase === "idle" || phase === "stopping") return;
     phase = "connecting"; setStatus("连接千问中", "请等待连接就绪后再开始讲话");
     const ws = new WebSocket(ENDPOINT); socket = ws;
+    clearTimeout(readyTimer);
+    readyTimer = setTimeout(() => { if (socket === ws && phase === "connecting") { setStatus("千问响应超时", "正在重连，尚未开始收音"); ws.close(); } }, 30000);
     ws.onopen = () => { if (socket === ws) ws.send(JSON.stringify({ type: "gateway.auth", code: accessCode })); };
     ws.onmessage = socketMessage;
     ws.onerror = () => { if (socket === ws) setStatus("连接出现问题", "正在检查网络"); };
     ws.onclose = () => {
       if (socket !== ws) return;
+      clearTimeout(readyTimer); readyTimer = null;
       socket = null;
       if (phase === "idle" || phase === "stopping") { finalizeStop(); return; }
       if (!gapStartedAt) gapStartedAt = Date.now();
@@ -213,8 +218,8 @@
     if ("speechSynthesis" in window) speechSynthesis.cancel();
   }
   function finalizeStop() {
-    clearTimeout(reconnectTimer); clearTimeout(finishTimer); clearInterval(timer);
-    reconnectTimer = null; finishTimer = null; timer = null;
+    clearTimeout(reconnectTimer); clearTimeout(finishTimer); clearTimeout(readyTimer); clearInterval(timer);
+    reconnectTimer = null; finishTimer = null; readyTimer = null; timer = null;
     if (gapStartedAt) { markGap((Date.now() - gapStartedAt) / 1000, "连接中断"); gapStartedAt = 0; }
     releaseMic();
     try { socket?.close(); } catch {} socket = null;
