@@ -11,7 +11,7 @@
   <script src="course-data.js" defer></script>
   <script src="app.js?v=20261008-4" defer></script>
   <script src="cloud-config.js" defer></script>
-  <script src="qwen-live.js?v=20261008-4" defer></script>
+  <script src="qwen-live.js?v=20261008-5" defer></script>
 </head>
 <body>
   <div class="ambient" aria-hidden="true"></div>
@@ -68,6 +68,7 @@
           <p class="body-copy">使用千问 LiveTranslate 实时模型。英文原句和中文译文会保存在当前浏览器；中文朗读使用设备语音，不调用云端语音输出。老师以外的声音也可能被识别，请核对原文。</p>
           <div class="button-row"><button id="qwen-start" class="primary-button" disabled>开始千问听译</button><button id="qwen-stop" class="secondary-button" disabled>停止并保存</button><button id="qwen-export" class="secondary-button" disabled>导出本次记录</button><label class="voice-option"><input id="qwen-speak" type="checkbox"> 播放中文语音</label></div>
           <p id="qwen-metrics" class="session-metrics" role="status">千问云端服务尚未配置；本机模式仍可使用。</p>
+          <p class="microcopy">若一直停在连接状态，请在同一手机和网络中打开<a href="https://hyy-qwen-gateway.heyuyou071215.workers.dev/health" target="_blank" rel="noopener">网关连接检测</a>。能看到 <code>configured:true</code> 表示手机可以访问网关；打不开则是手机到网关的网络连接问题。</p>
           <div class="translation-grid"><div class="translation-box"><span class="overline">中文译文 · ZH</span><div id="qwen-zh" aria-live="polite"><p>中文译文将在这里显示。</p></div></div><div class="translation-box"><span class="overline">英文原句 · EN</span><div id="qwen-en" aria-live="polite"><p>英文原句将在这里显示。</p></div></div></div>
           <p class="fine-print">按实际用量计费；北京地域有一次性试用额度，是否仍有剩余以百炼控制台为准。打开网页不会自动收音，只有点击“开始千问听译”才连接模型。长课请保持网页在前台；断线时会标出记录缺口。超过 120 分钟的真实连续收音尚待验证。</p>
         </div>

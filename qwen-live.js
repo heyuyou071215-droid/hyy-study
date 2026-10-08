@@ -155,13 +155,18 @@
   }
   function connect() {
     if (phase === "idle" || phase === "stopping") return;
-    phase = "connecting"; setStatus("连接千问中", "请等待连接就绪后再开始讲话");
+    phase = "connecting"; setStatus("正在连接同传网关", "若持续失败，请用同一手机打开下方的网关连接检测");
     const ws = new WebSocket(ENDPOINT); socket = ws;
+    let gatewayOpened = false;
     clearTimeout(readyTimer);
-    readyTimer = setTimeout(() => { if (socket === ws && phase === "connecting") { setStatus("千问响应超时", "正在重连，尚未开始收音"); ws.close(); } }, 30000);
-    ws.onopen = () => { if (socket === ws) ws.send(JSON.stringify({ type: "gateway.auth", code: accessCode })); };
+    readyTimer = setTimeout(() => { if (socket === ws && phase === "connecting") {
+      setStatus(gatewayOpened ? "千问响应超时" : "同传网关连接超时", "正在重连；尚未开始收音"); ws.close();
+    } }, 20000);
+    ws.onopen = () => { if (socket === ws) { gatewayOpened = true;
+      setStatus("网关已连接 · 正在连接千问", "正在等待模型响应，尚未开始收音");
+      ws.send(JSON.stringify({ type: "gateway.auth", code: accessCode })); } };
     ws.onmessage = socketMessage;
-    ws.onerror = () => { if (socket === ws) setStatus("连接出现问题", "正在检查网络"); };
+    ws.onerror = () => { if (socket === ws) setStatus(gatewayOpened ? "千问连接出现问题" : "手机无法连接同传网关", "请用同一手机打开下方的网关连接检测"); };
     ws.onclose = () => {
       if (socket !== ws) return;
       clearTimeout(readyTimer); readyTimer = null;
@@ -170,7 +175,7 @@
       if (!gapStartedAt) gapStartedAt = Date.now();
       if (++reconnects > MAX_RECONNECTS) { setStatus("多次重连失败", "麦克风已停止；请检查网络后重新开始"); finalizeStop(); return; }
       const delay = Math.min(2000 * reconnects, 10000);
-      setStatus("连接中断 · 正在重连", `${Math.round(delay / 1000)} 秒后尝试第 ${reconnects} 次重连`);
+      setStatus(gatewayOpened ? "千问连接中断 · 正在重连" : "同传网关未连上 · 正在重试", `${Math.round(delay / 1000)} 秒后尝试第 ${reconnects} 次重连`);
       reconnectTimer = setTimeout(connect, delay);
     };
   }
