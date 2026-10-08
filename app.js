@@ -18,6 +18,18 @@
   let liveRestartAttempts = 0;
   let liveRecognitionActive = false;
   let liveRecognitionError = "";
+  let liveMode = "";
+  let localWorker = null;
+  let localMic = null;
+  let localContext = null;
+  let localSource = null;
+  let localProcessor = null;
+  let localBuffers = [];
+  let localBufferLength = 0;
+  let localPending = 0;
+  let localChunkId = 0;
+  let localSkipped = 0;
+  let localStopping = false;
   let liveMetricsTimer = null;
   let liveWakeLock = null;
   let liveSaveFailed = false;
@@ -197,6 +209,7 @@
   function setupClassroom() {
     $("transcript-date").value = iso(new Date());
     setupLiveTranslation();
+    $("start-local").addEventListener("click", startLocalListening);
     $("translate-manual").addEventListener("click", async () => {
       const en = $("transcript-en").value.trim();
       if (!en) return toast("请先填写英文原句");
@@ -262,11 +275,141 @@
     liveRenderPending = true;
     requestAnimationFrame(renderLive);
   }
+  function addRecognizedEnglish(rawText, origin = "浏览器语音识别 · 自动翻译待核对") {
+    const en = String(rawText || "").trim();
+    if (!en) return;
+    const now = new Date();
+    const segment = { id: uid(), sessionId: liveSessionId, time: now.toLocaleTimeString("zh-CN", { hour12: false }), course: $("transcript-course").value.trim(), date: $("transcript-date").value || iso(now), en, zh: "", savedAt: now.toISOString(), origin };
+    liveSegments.push(segment);
+    state.transcripts.unshift(segment);
+    saveLiveProgress();
+    enqueueTranslation(segment);
+    queueLiveRender();
+    if (!liveTranslator) {
+      const sessionId = liveSessionId;
+      makeTranslator().then(translator => {
+        if (liveSessionId !== sessionId) return;
+        liveTranslator = translator;
+        void pumpTranslation();
+      }).catch(error => {
+        for (const segment of translationQueue) if (!segment.zh) segment.zh = "[翻译模型未加载，请核对英文原句]";
+        translationQueue = [];
+        saveLiveProgress(); queueLiveRender();
+        setLiveStatus("英文已保存 · 翻译模型未加载", `请检查网络；${error?.message || "模型加载失败"}。英文片段仍可导出。`);
+        finishLocalStopIfIdle();
+      });
+    }
+  }
+  function downsampleAudio(input, inputRate) {
+    if (inputRate === 16000) return input;
+    const length = Math.floor(input.length * 16000 / inputRate);
+    const output = new Float32Array(length);
+    const ratio = inputRate / 16000;
+    for (let i = 0; i < length; i++) {
+      const position = i * ratio, left = Math.floor(position), fraction = position - left;
+      output[i] = input[left] * (1 - fraction) + (input[Math.min(left + 1, input.length - 1)] || 0) * fraction;
+    }
+    return output;
+  }
+  function flushLocalAudio() {
+    if (!localBufferLength || !localWorker || !localContext) return;
+    const input = new Float32Array(localBufferLength);
+    let offset = 0;
+    for (const buffer of localBuffers) { input.set(buffer, offset); offset += buffer.length; }
+    localBuffers = []; localBufferLength = 0;
+    if (input.length < localContext.sampleRate * 2) return;
+    let energy = 0;
+    for (let i = 0; i < input.length; i += 16) energy += input[i] * input[i];
+    const rms = Math.sqrt(energy / Math.ceil(input.length / 16));
+    if (rms < 0.002) return;
+    if (localPending >= 8) {
+      localSkipped++;
+      const now = new Date();
+      const gap = { id: uid(), sessionId: liveSessionId, time: now.toLocaleTimeString("zh-CN", { hour12: false }), course: $("transcript-course").value.trim(), date: $("transcript-date").value || iso(now), en: "[约 8 秒音频未转写：本机模型处理积压]", zh: "[此处存在记录缺口]", savedAt: now.toISOString(), origin: "系统标记 · 音频缺口" };
+      liveSegments.push(gap); state.transcripts.unshift(gap); saveLiveProgress(); queueLiveRender();
+      setLiveStatus("本机识别积压", `模型处理速度跟不上收音；已有 ${localSkipped} 段约 8 秒音频未送去识别。请立即导出已识别内容并改用更快设备或云端服务。`);
+      return;
+    }
+    const audio = downsampleAudio(input, localContext.sampleRate);
+    localPending++;
+    localWorker.postMessage({ type: "audio", id: ++localChunkId, audio }, [audio.buffer]);
+    renderLiveMetrics();
+  }
+  async function startLocalListening() {
+    if (liveRunning) return;
+    const course = $("transcript-course").value.trim();
+    if (forbidden(course)) return toast("这门课程不纳入个人记录");
+    if (!navigator.mediaDevices?.getUserMedia || !window.AudioContext && !window.webkitAudioContext || !window.Worker) {
+      return setLiveStatus("本机收音不可用", "此浏览器缺少麦克风、音频处理或 Worker 接口。请使用最新 Chrome 或 Edge。");
+    }
+    liveMode = "local";
+    liveRunning = true;
+    liveRecognitionActive = false;
+    liveSegments = []; translationQueue = [];
+    liveSessionId = uid(); liveStartedAt = Date.now(); liveSaveFailed = false;
+    localBuffers = []; localBufferLength = 0; localPending = 0; localChunkId = 0; localSkipped = 0; localStopping = false;
+    renderLive();
+    $("start-local").disabled = true;
+    $("start-listening").disabled = true;
+    $("stop-listening").disabled = false;
+    liveMetricsTimer = setInterval(renderLiveMetrics, 10000);
+    if (navigator.wakeLock?.request) navigator.wakeLock.request("screen").then(lock => { if (liveRunning) liveWakeLock = lock; else lock.release(); }).catch(() => {});
+    setLiveStatus("正在准备本机识别", "首次需要下载 Whisper 模型；模型就绪前不会生成文字。请等状态显示“本机收音中”，再说英语测试。");
+    try {
+      const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+      localContext = new AudioContextClass();
+      void localContext.resume();
+      const worker = new Worker(new URL("asr-worker.js?v=20261008-1", location.href), { type: "module" });
+      localWorker = worker;
+      worker.onerror = event => { if (localWorker === worker) { stopLive(true); setLiveStatus("本机模型启动失败", event.message || "模型 Worker 无法运行。请检查浏览器和网络。"); } };
+      worker.onmessage = async ({ data }) => {
+        if (localWorker !== worker) return;
+        if (data.type === "progress") {
+          if (liveRunning && !liveRecognitionActive) setLiveStatus("正在下载本机识别模型", `已下载当前模型文件约 ${data.percent}% 。模型就绪后才开始收音。`);
+        } else if (data.type === "ready") {
+          if (!liveRunning) return;
+          try {
+            const stream = localMic || await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: true, autoGainControl: true } });
+            if (!liveRunning || localWorker !== worker) { stream.getTracks().forEach(track => track.stop()); return; }
+            localMic = stream;
+            await localContext.resume();
+            localSource = localContext.createMediaStreamSource(stream);
+            localProcessor = localContext.createScriptProcessor(4096, 1, 1);
+            localProcessor.onaudioprocess = event => {
+              if (!liveRunning || liveMode !== "local") return;
+              const samples = new Float32Array(event.inputBuffer.getChannelData(0));
+              localBuffers.push(samples); localBufferLength += samples.length;
+              if (localBufferLength >= localContext.sampleRate * 8) flushLocalAudio();
+            };
+            localSource.connect(localProcessor);
+            localProcessor.connect(localContext.destination);
+            stream.getAudioTracks()[0]?.addEventListener("ended", () => { if (liveRunning && liveMode === "local") { stopLive(); setLiveStatus("麦克风已断开", "系统停止了麦克风输入，请检查权限并重新开始。"); } });
+            liveRecognitionActive = true;
+            setLiveStatus("本机收音中", "现在说一句英语。约 8 秒后送入 Whisper 识别；模型推理完成后才显示英文和中文译文。");
+            renderLiveMetrics();
+          } catch (error) { stopLive(); setLiveStatus("本机收音启动失败", error?.message || "无法访问麦克风或音频处理器。"); }
+        } else if (data.type === "transcript" || data.type === "chunk-error") {
+          localPending = Math.max(0, localPending - 1);
+          if (data.type === "transcript" && data.text) addRecognizedEnglish(data.text, "Whisper 本机识别 · 自动翻译待核对");
+          if (data.type === "chunk-error") setLiveStatus("本机识别失败", `一段音频处理失败：${data.message}。其他片段仍会继续处理。`);
+          renderLiveMetrics();
+          finishLocalStopIfIdle();
+        } else if (data.type === "error") {
+          stopLive(true);
+          setLiveStatus("本机模型加载失败", `${data.message}。请检查网络与设备内存；可使用浏览器识别备选模式。`);
+        }
+      };
+      worker.postMessage({ type: "load" });
+    } catch (error) {
+      stopLive();
+      setLiveStatus("本机模式启动失败", error?.message || "无法启动本机语音识别。");
+    }
+  }
   function renderLiveMetrics() {
     const elapsed = liveStartedAt ? Math.floor((Date.now() - liveStartedAt) / 1000) : 0;
     const duration = `${String(Math.floor(elapsed / 3600)).padStart(2, "0")}:${String(Math.floor(elapsed / 60) % 60).padStart(2, "0")}:${String(elapsed % 60).padStart(2, "0")}`;
     $("session-metrics").textContent = liveStartedAt
-      ? `${liveRunning ? (liveRecognitionActive ? "识别中" : "等待识别连接") : "本次已停止"} ${duration} · ${liveSegments.length} 段 · 待翻译 ${translationQueue.length + Number(translationBusy)} 段 · ${liveSaveFailed ? "自动保存失败，请立即导出" : "已自动保存在当前浏览器"}`
+      ? `${liveRunning ? (liveRecognitionActive ? "识别中" : "等待识别连接") : "本次已停止"} ${duration} · ${liveSegments.length} 段${liveMode === "local" ? ` · 待识别 ${localPending} 段 · 缺口 ${localSkipped} 段` : ""} · 待翻译 ${translationQueue.length + Number(translationBusy)} 段 · ${liveSaveFailed ? "自动保存失败，请立即导出" : "已自动保存在当前浏览器"}`
       : "本次尚未开始 · 记录会自动保存在当前浏览器";
   }
   function saveLiveProgress() {
@@ -290,7 +433,7 @@
         queueLiveRender();
         await new Promise(resolve => setTimeout(resolve, 0));
       }
-    } finally { translationBusy = false; renderLiveMetrics(); }
+    } finally { translationBusy = false; renderLiveMetrics(); finishLocalStopIfIdle(); }
   }
   function enqueueTranslation(segment) {
     if (translationQueue.length >= 300) {
@@ -304,9 +447,7 @@
   function makeTranslator() {
     if (modelPromise) return modelPromise;
     modelPromise = (async () => {
-      const vendorBase = location.hostname.endsWith("github.io")
-        ? "https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.8.1/dist/"
-        : new URL("./vendor/", location.href).href;
+      const vendorBase = "https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.8.1/dist/";
       const { pipeline, env } = await import(`${vendorBase}transformers.min.js`);
       env.allowLocalModels = false;
       env.useBrowserCache = true;
@@ -318,16 +459,27 @@
   }
   function setupLiveTranslation() {
     const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    $("stop-listening").addEventListener("click", () => stopLive());
+    $("save-live").addEventListener("click", () => {
+      if (!liveSegments.length) return;
+      saveLiveProgress(); renderTranscripts(); toast(liveSaveFailed ? "保存失败，请立即导出本次记录" : "本次片段已保存在当前浏览器");
+    });
+    $("export-live").addEventListener("click", () => {
+      if (!liveSegments.length) return;
+      const lines = liveSegments.map(x => `### ${x.time}\n\n英文原句：${x.en}\n\n中文译文：${x.zh || "[翻译未完成]"}`).join("\n\n");
+      download(`HYY-study-实时记录-${iso(new Date())}.md`, `# 课堂实时记录\n\n自动识别与翻译结果，均需核对。\n\n${lines}\n`, "text/markdown;charset=utf-8");
+    });
     if (!Recognition) {
-      setLiveStatus("此浏览器不支持收音", "当前浏览器没有提供语音识别接口。请使用支持 Web Speech API 的浏览器；云端课堂服务仍需配置安全密钥。");
+      setLiveStatus("本机识别可尝试", "此浏览器不支持浏览器语音识别备选模式；可点击“开始本机收音翻译”尝试 Whisper 模型。");
       return;
     }
     $("start-listening").disabled = false;
-    setLiveStatus("可尝试收音", "点击开始后，浏览器会请求麦克风权限。语音识别可能由浏览器服务商处理音频；英中翻译由页面内的 OPUS-MT 模型完成，首次使用需下载并缓存在此浏览器。");
+    setLiveStatus("本机识别可尝试", "推荐先试本机模式：开源 Whisper 负责英文转写，OPUS-MT 负责中文翻译。首次使用需下载模型；浏览器识别仅作为备选。");
     $("start-listening").addEventListener("click", () => {
       if (liveRunning) return;
       const course = $("transcript-course").value.trim();
       if (forbidden(course)) return toast("这门课程不纳入个人记录");
+      liveMode = "browser";
       liveSegments = [];
       translationQueue = [];
       liveSessionId = uid();
@@ -363,13 +515,7 @@
             const en = String(result[0]?.transcript || "").trim();
             if (!en) continue;
             liveRestartAttempts = 0;
-            const now = new Date();
-            const segment = { id: uid(), sessionId: liveSessionId, time: now.toLocaleTimeString("zh-CN", { hour12: false }), course, date: $("transcript-date").value || iso(now), en, zh: "", savedAt: now.toISOString(), origin: "浏览器语音识别 · 自动翻译待核对" };
-            liveSegments.push(segment);
-            state.transcripts.unshift(segment);
-            saveLiveProgress();
-            enqueueTranslation(segment);
-            queueLiveRender();
+            addRecognizedEnglish(en);
           }
         };
         recognition.onerror = (event) => {
@@ -420,36 +566,54 @@
         setLiveStatus("启动失败", `浏览器未能启动课堂收音：${error?.message || "未知错误"}。请检查权限、网络与浏览器支持情况。`);
       }
     });
-    $("stop-listening").addEventListener("click", stopLive);
-    $("save-live").addEventListener("click", () => {
-      if (!liveSegments.length) return;
-      saveLiveProgress(); renderTranscripts(); toast(liveSaveFailed ? "保存失败，请立即导出本次记录" : "本次片段已保存在当前浏览器");
-    });
-    $("export-live").addEventListener("click", () => {
-      if (!liveSegments.length) return;
-      const lines = liveSegments.map(x => `### ${x.time}\n\n英文原句：${x.en}\n\n中文译文：${x.zh || "[翻译未完成]"}`).join("\n\n");
-      download(`HYY-study-实时记录-${iso(new Date())}.md`, `# 课堂实时记录\n\n自动识别与翻译结果，均需核对。\n\n${lines}\n`, "text/markdown;charset=utf-8");
-    });
   }
-  function stopLive() {
+  function finishLocalStopIfIdle() {
+    if (!localStopping || localPending || translationQueue.length || translationBusy) return;
+    try { localWorker?.terminate(); } catch {}
+    localWorker = null; localStopping = false; liveTranslator = null;
+    $("start-local").disabled = false;
+    $("start-listening").disabled = !(window.SpeechRecognition || window.webkitSpeechRecognition);
+    setLiveStatus("已停止并保存", "麦克风已释放，已收到的片段已处理完。请检查译文并导出本次记录。");
+    renderLiveMetrics();
+  }
+  function stopLive(force = false) {
+    const drainLocal = !force && liveMode === "local" && Boolean(localWorker);
+    if (drainLocal && localBufferLength) flushLocalAudio();
     liveRunning = false;
     liveRecognitionActive = false;
+    try { localProcessor?.disconnect(); } catch {}
+    try { localSource?.disconnect(); } catch {}
+    try { localContext?.close(); } catch {}
+    try { localMic?.getTracks().forEach(track => track.stop()); } catch {}
+    localProcessor = null; localSource = null; localContext = null; localMic = null;
+    localBuffers = []; localBufferLength = 0;
     clearTimeout(liveRestartTimer);
     clearInterval(liveMetricsTimer);
     liveRestartTimer = null;
     liveMetricsTimer = null;
     try { liveRecognition?.abort(); } catch {}
     liveRecognition = null;
-    liveTranslator = null;
-    for (const segment of translationQueue) if (!segment.zh) segment.zh = "[翻译未完成，请核对英文原句]";
-    translationQueue = [];
     queueLiveRender();
     try { liveWakeLock?.release(); } catch {}
     liveWakeLock = null;
     if (liveSegments.length) saveLiveProgress();
     if ("speechSynthesis" in window) speechSynthesis.cancel();
-    $("start-listening").disabled = !(window.SpeechRecognition || window.webkitSpeechRecognition);
     $("stop-listening").disabled = true;
+    if (drainLocal && (localPending || translationQueue.length || translationBusy)) {
+      localStopping = true;
+      $("start-local").disabled = true;
+      $("start-listening").disabled = true;
+      setLiveStatus("已停止收音 · 正在补完记录", `麦克风已释放；还有 ${localPending} 段音频待识别。请保持网页打开，处理完即可导出。`);
+      renderLiveMetrics();
+      return;
+    }
+    try { localWorker?.terminate(); } catch {}
+    localWorker = null; localPending = 0; localStopping = false;
+    liveTranslator = null;
+    for (const segment of translationQueue) if (!segment.zh) segment.zh = "[翻译未完成，请核对英文原句]";
+    translationQueue = [];
+    $("start-local").disabled = false;
+    $("start-listening").disabled = !(window.SpeechRecognition || window.webkitSpeechRecognition);
     if (["准备中", "正在收音翻译", "正在收音 · 模型加载中", "正在下载翻译模型", "收音中 · 翻译模型失败", "收音中 · 译文延迟", "识别中断 · 正在重连"].includes($("translation-status").textContent)) setLiveStatus("已停止收音", "麦克风已停止。已识别的英文保存在当前浏览器；可导出本次记录。");
     renderLiveMetrics();
   }
@@ -657,7 +821,7 @@
     }
   }
   function releaseClassroom() {
-    stopLive();
+    stopLive(true);
     modelPromise = null;
     try { activeMic?.getTracks().forEach(track => track.stop()); } catch {}
     try { activeConnection?.close?.(); } catch {}

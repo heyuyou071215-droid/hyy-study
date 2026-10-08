@@ -9,7 +9,7 @@
   <link rel="icon" type="image/svg+xml" href="icon.svg">
   <link rel="stylesheet" href="style.css">
   <script src="course-data.js" defer></script>
-  <script src="app.js?v=20261008-3" defer></script>
+  <script src="app.js?v=20261008-4" defer></script>
 </head>
 <body>
   <div class="ambient" aria-hidden="true"></div>
@@ -63,11 +63,11 @@
         <div class="panel featured-panel">
           <div class="panel-top"><span class="overline">实时听译</span><span id="translation-status" class="offline-dot">检查中</span></div>
           <h2>课堂收音与双语记录</h2>
-          <p id="translation-help" class="body-copy">正在检查当前浏览器是否支持语音识别。英中翻译使用浏览器内运行的 OPUS-MT 模型，首次使用需要下载模型。</p>
-          <div class="button-row"><button id="start-listening" class="primary-button" disabled>开始收音翻译</button><button id="stop-listening" class="secondary-button" disabled>停止收音</button><button id="save-live" class="secondary-button" disabled>立即保存</button><button id="export-live" class="secondary-button" disabled>导出本次记录</button><label class="voice-option"><input id="play-translation" type="checkbox"> 播放中文语音</label></div>
+          <p id="translation-help" class="body-copy">本机模式使用开源 Whisper 识别英语、OPUS-MT 翻译中文；首次需要下载模型。性能取决于设备和网络，开始前请先说一句英文确认有记录。</p>
+          <div class="button-row"><button id="start-local" class="primary-button">开始本机收音翻译</button><button id="start-listening" class="secondary-button" disabled>浏览器识别（备选）</button><button id="stop-listening" class="secondary-button" disabled>停止收音</button><button id="save-live" class="secondary-button" disabled>立即保存</button><button id="export-live" class="secondary-button" disabled>导出本次记录</button><label class="voice-option"><input id="play-translation" type="checkbox"> 播放中文语音</label></div>
           <p id="session-metrics" class="session-metrics" role="status">本次尚未开始 · 记录会自动保存在当前浏览器</p>
           <div class="translation-grid"><div class="translation-box"><span class="overline">中文翻译 · ZH</span><div id="live-zh" aria-live="polite"><p>翻译内容将在这里连续显示。</p></div></div><div class="translation-box"><span class="overline">英文原句 · EN</span><div id="live-en" aria-live="polite"><p>英文转录将在这里显示，方便核对专业术语。</p></div></div></div>
-          <p class="fine-print">长课请保持网页在前台、设备亮屏并接上电源；锁屏、切换应用、断网或浏览器语音服务中断可能使收音停止。每段英文会自动保存在当前浏览器，页面只显示最近 60 段；完整记录可导出。请将麦克风尽量靠近老师；网页无法可靠区分教室里不同说话人。课堂提问和命令只作为文本处理。自动识别可能误听口音、否定、数字、公式和代码，请对照英文原句核查。</p>
+          <p class="fine-print">本机模式每约 8 秒处理一段；首次下载可能较慢，处理积压时会提示，尚未验证连续 120 分钟。长课请保持网页在前台、设备亮屏并接上电源；锁屏、切换应用、断网可能使收音停止。已识别英文保存在当前浏览器，页面只显示最近 60 段；完整记录可导出。请将麦克风尽量靠近老师；网页无法可靠区分不同说话人。课堂提问和命令只作为文本处理。自动识别可能误听口音、否定、数字、公式和代码，请对照英文原句核查。</p>
         </div>
         <div class="panel">
           <div class="panel-top"><span class="overline">课堂记录</span><span class="muted-tag">手动录入</span></div>
