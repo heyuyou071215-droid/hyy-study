@@ -16,6 +16,8 @@
   let liveStartedAt = 0;
   let liveRestartTimer = null;
   let liveRestartAttempts = 0;
+  let liveRecognitionActive = false;
+  let liveRecognitionError = "";
   let liveMetricsTimer = null;
   let liveWakeLock = null;
   let liveSaveFailed = false;
@@ -264,7 +266,7 @@
     const elapsed = liveStartedAt ? Math.floor((Date.now() - liveStartedAt) / 1000) : 0;
     const duration = `${String(Math.floor(elapsed / 3600)).padStart(2, "0")}:${String(Math.floor(elapsed / 60) % 60).padStart(2, "0")}:${String(elapsed % 60).padStart(2, "0")}`;
     $("session-metrics").textContent = liveStartedAt
-      ? `${liveRunning ? "收音中" : "本次已停止"} ${duration} · ${liveSegments.length} 段 · 待翻译 ${translationQueue.length + Number(translationBusy)} 段 · ${liveSaveFailed ? "自动保存失败，请立即导出" : "已自动保存在当前浏览器"}`
+      ? `${liveRunning ? (liveRecognitionActive ? "识别中" : "等待识别连接") : "本次已停止"} ${duration} · ${liveSegments.length} 段 · 待翻译 ${translationQueue.length + Number(translationBusy)} 段 · ${liveSaveFailed ? "自动保存失败，请立即导出" : "已自动保存在当前浏览器"}`
       : "本次尚未开始 · 记录会自动保存在当前浏览器";
   }
   function saveLiveProgress() {
@@ -333,8 +335,10 @@
       liveStartedAt = Date.now();
       liveSaveFailed = false;
       liveRestartAttempts = 0;
-      renderLive();
+      liveRecognitionActive = false;
+      liveRecognitionError = "";
       liveRunning = true;
+      renderLive();
       $("start-listening").disabled = true;
       $("stop-listening").disabled = false;
       liveMetricsTimer = setInterval(renderLiveMetrics, 10000);
@@ -345,6 +349,13 @@
         recognition.continuous = true;
         recognition.interimResults = true;
         recognition.maxAlternatives = 1;
+        recognition.onstart = () => {
+          if (!liveRunning || liveRecognition !== recognition) return;
+          liveRecognitionActive = true;
+          liveRecognitionError = "";
+          setLiveStatus(liveTranslator ? "正在收音翻译" : "正在收音 · 模型加载中", "浏览器语音识别已连接；只有识别完成的英文片段才会保存。请对着麦克风说一句英文检查是否出现记录。");
+          renderLiveMetrics();
+        };
         recognition.onresult = (event) => {
           for (let i = event.resultIndex; i < event.results.length; i++) {
             const result = event.results[i];
@@ -362,6 +373,10 @@
           }
         };
         recognition.onerror = (event) => {
+          if (!liveRunning || liveRecognition !== recognition) return;
+          liveRecognitionError = event.error || "unknown";
+          liveRecognitionActive = false;
+          renderLiveMetrics();
           const reason = event.error === "not-allowed" ? "浏览器未允许语音输入（not-allowed）" : event.error === "service-not-allowed" ? "浏览器语音识别服务不可用（service-not-allowed）" : event.error === "no-speech" ? "暂未识别到讲话" : `语音识别中断：${event.error}`;
           if (event.error === "no-speech") liveRestartAttempts = 0;
           const help = event.error === "not-allowed" || event.error === "service-not-allowed"
@@ -372,6 +387,8 @@
         };
         recognition.onend = () => {
           if (!liveRunning || liveRecognition !== recognition) return;
+          liveRecognitionActive = false;
+          renderLiveMetrics();
           clearTimeout(liveRestartTimer);
           liveRestartAttempts++;
           if (liveRestartAttempts > 12) {
@@ -380,20 +397,20 @@
             return;
           }
           const delay = Math.min(1000 * 2 ** Math.min(liveRestartAttempts - 1, 4), 15000);
-          setLiveStatus("识别中断 · 正在重连", `${Math.ceil(delay / 1000)} 秒后自动重试；已识别的英文已保存在当前浏览器。`);
+          setLiveStatus("识别中断 · 正在重连", `${liveRecognitionError ? `浏览器返回 ${liveRecognitionError}；` : "浏览器识别服务已断开；"}${Math.ceil(delay / 1000)} 秒后自动重试。重连期间没有收音，已识别片段保存在当前浏览器。`);
           liveRestartTimer = setTimeout(() => {
             if (!liveRunning || liveRecognition !== recognition) return;
             try { recognition.start(); } catch { recognition.onend(); }
           }, delay);
         };
         liveRecognition = recognition;
+        setLiveStatus("等待识别连接", "已向浏览器发起语音识别请求；连接成功后才开始记录英文片段。");
         recognition.start();
-        setLiveStatus("正在收音 · 模型加载中", "英文识别已启动；模型准备期间英文原句会先保存，之后自动补译。");
         if (navigator.wakeLock?.request) navigator.wakeLock.request("screen").then(lock => { if (liveRunning) liveWakeLock = lock; else lock.release(); }).catch(() => {});
         makeTranslator().then(translator => {
           if (!liveRunning || liveSessionId !== sessionId) return;
           liveTranslator = translator;
-          setLiveStatus("正在收音翻译", "英文原句实时保存；中文译文逐段补上。请核对关键术语、否定、数字和公式。");
+          if (liveRecognitionActive) setLiveStatus("正在收音翻译", "英文原句实时保存；中文译文逐段补上。请核对关键术语、否定、数字和公式。");
           void pumpTranslation();
         }).catch((error) => {
           if (liveRunning && liveSessionId === sessionId) setLiveStatus("收音中 · 翻译模型失败", `英文仍自动保存；翻译模型未能加载：${error?.message || "未知错误"}。请检查网络后重新开始。`);
@@ -416,6 +433,7 @@
   }
   function stopLive() {
     liveRunning = false;
+    liveRecognitionActive = false;
     clearTimeout(liveRestartTimer);
     clearInterval(liveMetricsTimer);
     liveRestartTimer = null;
