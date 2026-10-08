@@ -146,7 +146,7 @@
       clearTimeout(readyTimer); readyTimer = null;
       if (gapStartedAt) { markGap((Date.now() - gapStartedAt) / 1000, "连接中断"); gapStartedAt = 0; }
       reconnects = 0; connectionStartedAt = Date.now();
-      setStatus("千问已连接 · 等待麦克风", "请在浏览器权限提示中允许麦克风");
+      setStatus("千问已连接 · 启动收音", "正在准备音频处理器");
       startMicrophone().catch(error => { setStatus("麦克风启动失败", error?.message || "请检查权限"); finalizeStop(); });
       return;
     }
@@ -187,12 +187,18 @@
     sentSeconds += buffer.byteLength / 32000;
     if (Math.floor(sentSeconds) % 5 === 0) metrics();
   }
+  async function ensureStream() {
+    if (stream) return;
+    const acquired = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: false, noiseSuppression: true, autoGainControl: true } });
+    if (phase === "idle" || phase === "stopping") { acquired.getTracks().forEach(track => track.stop()); return; }
+    stream = acquired;
+    stream.getAudioTracks()[0]?.addEventListener("ended", () => { if (phase === "active") { setStatus("麦克风已断开"); stop(); } });
+  }
   async function startMicrophone() {
     if (phase !== "connecting") return;
-    if (!stream) {
-      stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: false, noiseSuppression: true, autoGainControl: true } });
-      if (phase !== "connecting") { releaseMic(); return; }
-      stream.getAudioTracks()[0]?.addEventListener("ended", () => { if (phase === "active") { setStatus("麦克风已断开"); stop(); } });
+    await ensureStream();
+    if (phase !== "connecting" || !stream) return;
+    if (!context) {
       const AudioContext = window.AudioContext || window.webkitAudioContext;
       context = new AudioContext();
       await context.audioWorklet.addModule(new URL("pcm-worklet.js", location.href));
@@ -248,7 +254,10 @@
     billedAudioTokens = 0; billedTextTokens = 0; missedSeconds = 0; errorText = "";
     $("qwen-start").disabled = true; $("qwen-stop").disabled = false;
     window.dispatchEvent(new CustomEvent("hyy-cloud-state", { detail: { active: true } }));
-    timer = setInterval(metrics, 1000); scheduleRender(); connect();
+    timer = setInterval(metrics, 1000); scheduleRender();
+    setStatus("等待麦克风授权", "允许麦克风后才连接千问；浏览器通常会记住这项许可");
+    void ensureStream().then(() => { if (phase === "connecting" && stream) connect(); })
+      .catch(error => { setStatus("麦克风启动失败", error?.message || "请检查权限"); finalizeStop(); });
   }
   function exportSession() {
     const lines = segments.map(x => `### ${x.time}\n\n英文原句：${x.gap || x.en || "[未识别]"}\n\n中文译文：${x.gap ? "[此处存在记录缺口]" : x.zh || "[未翻译]"}`).join("\n\n");
