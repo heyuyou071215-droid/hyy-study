@@ -238,7 +238,7 @@
     if (!navigator.mediaDevices?.getUserMedia || !window.AudioWorkletNode) { setStatus("浏览器不支持云端收音", "请使用较新的 Chrome 或 Edge"); return; }
     if (!$("stop-listening").disabled) { setStatus("请先停止本机收音", "同一时间只能使用一种收音模式"); return; }
     if (/军事理论|中国近现代史纲要/.test($("transcript-course").value)) { setStatus("该课程不纳入个人记录"); return; }
-    accessCode = code; sessionId = crypto.randomUUID(); startedAt = Date.now();
+    accessCode = code; sessionId = crypto.randomUUID(); startedAt = Date.now(); phase = "connecting";
     segments.length = 0; byItem.clear(); reconnects = 0; gapStartedAt = 0; sentSeconds = 0;
     billedAudioTokens = 0; billedTextTokens = 0; missedSeconds = 0; errorText = "";
     $("qwen-start").disabled = true; $("qwen-stop").disabled = false;
