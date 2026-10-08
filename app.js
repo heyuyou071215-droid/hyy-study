@@ -215,7 +215,7 @@
     });
     $("export-transcript").addEventListener("click", () => {
       const md = state.transcripts.map(x => `## ${x.date} · ${x.course || "未填写课程"}\n\n英文原句：${x.en || "未填写"}\n\n中文译文：${x.zh || "未填写"}\n\n来源：${x.origin}\n`).join("\n---\n\n");
-      download("课程study-课堂记录.md", `# 课堂记录\n\n${md || "暂无记录。"}\n`, "text/markdown;charset=utf-8");
+      download("HYY-study-课堂记录.md", `# 课堂记录\n\n${md || "暂无记录。"}\n`, "text/markdown;charset=utf-8");
     });
     renderTranscripts();
   }
@@ -411,7 +411,7 @@
     $("export-live").addEventListener("click", () => {
       if (!liveSegments.length) return;
       const lines = liveSegments.map(x => `### ${x.time}\n\n英文原句：${x.en}\n\n中文译文：${x.zh || "[翻译未完成]"}`).join("\n\n");
-      download(`课程study-实时记录-${iso(new Date())}.md`, `# 课堂实时记录\n\n自动识别与翻译结果，均需核对。\n\n${lines}\n`, "text/markdown;charset=utf-8");
+      download(`HYY-study-实时记录-${iso(new Date())}.md`, `# 课堂实时记录\n\n自动识别与翻译结果，均需核对。\n\n${lines}\n`, "text/markdown;charset=utf-8");
     });
   }
   function stopLive() {
@@ -546,7 +546,7 @@
     });
     $("export-summaries").addEventListener("click", () => {
       const md = state.summaries.map(x => `## ${x.date} · ${x.course}\n\n资料类型：${x.kind}\n\n### 原文\n\n${x.text}\n\n### 原文提取\n\n${Object.entries(x.outline || {}).map(([k, v]) => v.length ? `**${k}**\n${v.map(y => `- ${y.text}（${y.position}）`).join("\n")}` : "").filter(Boolean).join("\n\n")}\n`).join("\n---\n\n");
-      download("课程study-课堂总结.md", `# 课堂总结\n\n${md || "暂无总结。"}\n`, "text/markdown;charset=utf-8");
+      download("HYY-study-课堂总结.md", `# 课堂总结\n\n${md || "暂无总结。"}\n`, "text/markdown;charset=utf-8");
     }); renderSummaries();
   }
   function renderSummaries() {
@@ -570,7 +570,7 @@
     });
     $("export-manual-notes").addEventListener("click", () => {
       const md = state.notes.map(x => `## ${x.date} · ${x.course}\n\n类型：${x.kind}\n\n${x.text}\n`).join("\n---\n\n");
-      download("课程study-课堂笔记.md", `# 课堂笔记\n\n${md || "暂无笔记。"}\n`, "text/markdown;charset=utf-8");
+      download("HYY-study-课堂笔记.md", `# 课堂笔记\n\n${md || "暂无笔记。"}\n`, "text/markdown;charset=utf-8");
     }); renderManualNotes();
   }
   function renderManualNotes() {
@@ -589,7 +589,7 @@
       state.terms.unshift({ id: uid(), en, zh, course }); save(); $("term-en").value = ""; $("term-zh").value = ""; $("term-course").value = ""; renderTerms(); toast("术语已保存");
     });
     $("term-search").addEventListener("input", renderTerms);
-    $("export-glossary").addEventListener("click", () => download("课程study-术语.csv", "\ufeff英文术语,中文解释,课程或来源\r\n" + state.terms.map(x => [x.en, x.zh, x.course].map(csv).join(",")).join("\r\n"), "text/csv;charset=utf-8"));
+    $("export-glossary").addEventListener("click", () => download("HYY-study-术语.csv", "\ufeff英文术语,中文解释,课程或来源\r\n" + state.terms.map(x => [x.en, x.zh, x.course].map(csv).join(",")).join("\r\n"), "text/csv;charset=utf-8"));
     renderTerms();
   }
   const csv = (value) => `"${String(value || "").replaceAll('"', '""')}"`;
@@ -610,7 +610,7 @@
       state.tasks.unshift({ id: uid(), course, title, date: $("task-date").value, source: $("task-source").value.trim(), done: false }); save();
       for (const id of ["task-course", "task-title", "task-date", "task-source"]) $(id).value = ""; renderTasks(); toast("事项已加入清单");
     });
-    $("export-all").addEventListener("click", () => download(`课程study-备份-${iso(new Date())}.json`, JSON.stringify({ app: "课程study", version: 1, exportedAt: new Date().toISOString(), data: state }, null, 2), "application/json;charset=utf-8"));
+    $("export-all").addEventListener("click", () => download(`HYY-study-备份-${iso(new Date())}.json`, JSON.stringify({ app: "课程study", version: 1, exportedAt: new Date().toISOString(), data: state }, null, 2), "application/json;charset=utf-8"));
     $("import-all").addEventListener("change", async (e) => {
       const file = e.target.files?.[0]; if (!file) return;
       try {
@@ -619,10 +619,10 @@
         if (!confirm("导入备份将替换当前浏览器中的笔记、术语、任务、转录和手动课程。继续吗？")) return;
         state = Object.fromEntries(Object.keys(blank()).map(k => [k, incoming[k].filter(x => x && typeof x === "object" && !forbidden(x.course || x.title))]));
         save(); renderWeek(); renderTranscripts(); renderSummaries(); renderManualNotes(); renderTerms(); renderTasks(); toast("备份已导入");
-      } catch { toast("无法读取此备份，请选择课程study导出的 JSON 文件"); }
+      } catch { toast("无法读取此备份，请选择 HYY study 或课程study导出的 JSON 文件"); }
       finally { e.target.value = ""; }
     });
-    $("clear-data").addEventListener("click", () => { if (!confirm("清空当前浏览器里的所有课程study个人记录？此操作无法在网页中撤销。")) return; state = blank(); save(); renderWeek(); renderTranscripts(); renderSummaries(); renderManualNotes(); renderTerms(); renderTasks(); toast("当前浏览器记录已清空"); });
+    $("clear-data").addEventListener("click", () => { if (!confirm("清空当前浏览器里的所有 HYY study 个人记录？此操作无法在网页中撤销。")) return; state = blank(); save(); renderWeek(); renderTranscripts(); renderSummaries(); renderManualNotes(); renderTerms(); renderTasks(); toast("当前浏览器记录已清空"); });
     renderTasks();
   }
   function renderTasks() {
