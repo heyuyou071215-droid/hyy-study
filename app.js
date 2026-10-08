@@ -336,7 +336,7 @@
     renderLiveMetrics();
   }
   async function startLocalListening() {
-    if (liveRunning) return;
+    if (liveRunning || window.HYY_STUDY_CLOUD_ACTIVE) return;
     const course = $("transcript-course").value.trim();
     if (forbidden(course)) return toast("这门课程不纳入个人记录");
     if (!navigator.mediaDevices?.getUserMedia || !window.AudioContext && !window.webkitAudioContext || !window.Worker) {
@@ -476,7 +476,7 @@
     $("start-listening").disabled = false;
     setLiveStatus("本机识别可尝试", "推荐先试本机模式：开源 Whisper 负责英文转写，OPUS-MT 负责中文翻译。首次使用需下载模型；浏览器识别仅作为备选。");
     $("start-listening").addEventListener("click", () => {
-      if (liveRunning) return;
+      if (liveRunning || window.HYY_STUDY_CLOUD_ACTIVE) return;
       const course = $("transcript-course").value.trim();
       if (forbidden(course)) return toast("这门课程不纳入个人记录");
       liveMode = "browser";
@@ -571,8 +571,8 @@
     if (!localStopping || localPending || translationQueue.length || translationBusy) return;
     try { localWorker?.terminate(); } catch {}
     localWorker = null; localStopping = false; liveTranslator = null;
-    $("start-local").disabled = false;
-    $("start-listening").disabled = !(window.SpeechRecognition || window.webkitSpeechRecognition);
+    $("start-local").disabled = Boolean(window.HYY_STUDY_CLOUD_ACTIVE);
+    $("start-listening").disabled = Boolean(window.HYY_STUDY_CLOUD_ACTIVE) || !(window.SpeechRecognition || window.webkitSpeechRecognition);
     setLiveStatus("已停止并保存", "麦克风已释放，已收到的片段已处理完。请检查译文并导出本次记录。");
     renderLiveMetrics();
   }
@@ -612,8 +612,8 @@
     liveTranslator = null;
     for (const segment of translationQueue) if (!segment.zh) segment.zh = "[翻译未完成，请核对英文原句]";
     translationQueue = [];
-    $("start-local").disabled = false;
-    $("start-listening").disabled = !(window.SpeechRecognition || window.webkitSpeechRecognition);
+    $("start-local").disabled = Boolean(window.HYY_STUDY_CLOUD_ACTIVE);
+    $("start-listening").disabled = Boolean(window.HYY_STUDY_CLOUD_ACTIVE) || !(window.SpeechRecognition || window.webkitSpeechRecognition);
     if (["准备中", "正在收音翻译", "正在收音 · 模型加载中", "正在下载翻译模型", "收音中 · 翻译模型失败", "收音中 · 译文延迟", "识别中断 · 正在重连"].includes($("translation-status").textContent)) setLiveStatus("已停止收音", "麦克风已停止。已识别的英文保存在当前浏览器；可导出本次记录。");
     renderLiveMetrics();
   }
@@ -833,4 +833,30 @@
   document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") releaseClassroom(); });
 
   load(); setupNavigation(); setupSchedule(); setupClassroom(); setupSummaries(); setupManualNotes(); setupGlossary(); setupPlan();
+  window.HYY_STUDY_SAVE_CLOUD = (record) => {
+    if (!record || typeof record.id !== "string" || forbidden(record.course)) return false;
+    const safe = {
+      id: record.id.slice(0, 100),
+      sessionId: String(record.sessionId || "").slice(0, 100),
+      date: String(record.date || iso(new Date())).slice(0, 10),
+      time: String(record.time || "").slice(0, 12),
+      course: String(record.course || "").slice(0, 120),
+      en: String(record.en || "").slice(0, 16000),
+      zh: String(record.zh || "").slice(0, 16000),
+      origin: "千问实时同传 · 自动结果待核对",
+      savedAt: String(record.savedAt || new Date().toISOString()).slice(0, 30)
+    };
+    const index = state.transcripts.findIndex(item => item.id === safe.id);
+    if (index < 0) state.transcripts.unshift(safe);
+    else state.transcripts[index] = safe;
+    const okay = save();
+    if (!$("view-classroom").hidden) renderTranscripts();
+    return okay;
+  };
+  window.addEventListener("hyy-cloud-state", event => {
+    const active = Boolean(event.detail?.active);
+    window.HYY_STUDY_CLOUD_ACTIVE = active;
+    $("start-local").disabled = active || liveRunning;
+    $("start-listening").disabled = active || liveRunning || !(window.SpeechRecognition || window.webkitSpeechRecognition);
+  });
 })();
