@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#090b0d">
+  <meta name="description" content="HYY study：人工智能2601班的课表与课堂学习工作区。">
+  <title>HYY study · 人工智能2601</title>
+  <link rel="icon" type="image/svg+xml" href="icon.svg">
+  <link rel="stylesheet" href="style.css">
+  <script src="course-data.js" defer></script>
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <div class="ambient" aria-hidden="true"></div>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <a class="brand" href="#schedule" aria-label="HYY study，返回课表">
+        <span class="brand-mark">H</span><span class="brand-name">HYY<span>study</span></span>
+      </a>
+      <nav class="nav" aria-label="主导航">
+        <button class="nav-item active" data-view="schedule">我的课表</button>
+        <button class="nav-item" data-view="classroom">课堂工具</button>
+        <button class="nav-item" data-view="summary">课堂总结</button>
+        <button class="nav-item" data-view="notes">课堂笔记</button>
+        <button class="nav-item" data-view="glossary">专业术语</button>
+        <button class="nav-item" data-view="plan">学习清单</button>
+      </nav>
+      <span class="class-pill">AI · 2601</span>
+    </div>
+  </header>
+
+  <main class="shell">
+    <section class="view active" id="view-schedule" aria-labelledby="schedule-heading">
+      <div class="hero"><p class="eyebrow">AN INTELLIGENT SPACE · AI 2601 CLASSROOM</p><h1>HYY<span>study.</span></h1><p>把每一堂课，变成自己的理解。</p></div>
+      <div class="view-heading schedule-heading"><div><p class="eyebrow">01 / YOUR WEEK</p><h2 id="schedule-heading">一周课程，一目了然。</h2><p class="heading-copy">按原始课表日期整理，点击课程查看老师、地点和来源。</p></div><div class="source-status"><span class="status-light"></span><span>2601 班 · 2026 年秋季</span></div></div>
+      <div class="control-bar">
+        <div class="week-nav" aria-label="切换周次">
+          <button id="prev-week" class="icon-button" aria-label="上一周">‹</button>
+          <div id="week-range" class="week-range"></div>
+          <button id="next-week" class="icon-button" aria-label="下一周">›</button>
+        </div>
+        <div class="control-actions">
+          <button id="this-week" class="quiet-button">本周</button>
+          <label class="date-jump">跳转日期 <input id="jump-date" type="date" aria-label="跳转日期"></label>
+          <label class="switch-label"><input id="major-only" type="checkbox"><span class="switch-track"></span>仅看专业课</label>
+        </div>
+      </div>
+      <div class="source-alert" role="note">
+        <div class="alert-icon">i</div><div><strong>按 2026 年秋季原表日期整理</strong><p>已从“26级人工智能课表”筛出 2601 班及未标注分班的课程。原表把 9 月 28 日和 10 月 5 日所在周都写作 WEEK 4；页面按日期显示。个别姓名在原表中截断，详情中会标记。</p></div>
+      </div>
+      <div class="schedule-card">
+        <div id="week-grid" class="week-grid" aria-label="周一至周日课程表"></div>
+        <div id="mobile-week" class="mobile-week" aria-label="手机七天总览"></div>
+        <div id="mobile-day" class="mobile-day"></div>
+      </div>
+      <div class="under-grid"><span>节次和时间沿用 2026 年秋季原表；手动新增内容会标记为待核对。</span><button id="add-course" class="text-button">手动记录待核对课程</button></div>
+    </section>
+
+    <section class="view" id="view-classroom" aria-labelledby="classroom-heading" hidden>
+      <div class="view-heading"><div><p class="eyebrow">02 / LIVE CLASSROOM</p><h1 id="classroom-heading">实时翻译，专注听课。</h1></div><span id="translation-badge" class="muted-tag">正在检查浏览器能力</span></div>
+      <div class="classroom-stack">
+        <div class="panel featured-panel">
+          <div class="panel-top"><span class="overline">实时听译</span><span id="translation-status" class="offline-dot">检查中</span></div>
+          <h2>课堂收音与双语记录</h2>
+          <p id="translation-help" class="body-copy">正在检查当前浏览器是否支持语音识别。英中翻译使用浏览器内运行的 OPUS-MT 模型，首次使用需要下载模型。</p>
+          <div class="button-row"><button id="start-listening" class="primary-button" disabled>开始收音翻译</button><button id="stop-listening" class="secondary-button" disabled>停止收音</button><button id="save-live" class="secondary-button" disabled>立即保存</button><button id="export-live" class="secondary-button" disabled>导出本次记录</button><label class="voice-option"><input id="play-translation" type="checkbox"> 播放中文语音</label></div>
+          <p id="session-metrics" class="session-metrics" role="status">本次尚未开始 · 记录会自动保存在当前浏览器</p>
+          <div class="translation-grid"><div class="translation-box"><span class="overline">中文翻译 · ZH</span><div id="live-zh" aria-live="polite"><p>翻译内容将在这里连续显示。</p></div></div><div class="translation-box"><span class="overline">英文原句 · EN</span><div id="live-en" aria-live="polite"><p>英文转录将在这里显示，方便核对专业术语。</p></div></div></div>
+          <p class="fine-print">长课请保持网页在前台、设备亮屏并接上电源；锁屏、切换应用、断网或浏览器语音服务中断可能使收音停止。每段英文会自动保存在当前浏览器，页面只显示最近 60 段；完整记录可导出。请将麦克风尽量靠近老师；网页无法可靠区分教室里不同说话人。课堂提问和命令只作为文本处理。自动识别可能误听口音、否定、数字、公式和代码，请对照英文原句核查。</p>
+        </div>
+        <div class="panel">
+          <div class="panel-top"><span class="overline">课堂记录</span><span class="muted-tag">手动录入</span></div>
+          <h2>保存已有转录</h2>
+          <label class="field">课程名称<input id="transcript-course" placeholder="例如：线性代数"></label>
+          <label class="field">日期<input id="transcript-date" type="date"></label>
+          <label class="field">英文原句<textarea id="transcript-en" rows="3" placeholder="粘贴听到的英文原句；听不清的部分请标记 [听不清]"></textarea></label>
+          <label class="field">中文译文<textarea id="transcript-zh" rows="3" placeholder="粘贴或自行填写译文；推测内容请标记 [推测]"></textarea></label>
+          <div class="button-row"><button id="translate-manual" class="secondary-button">翻译英文原句</button><button id="save-transcript" class="primary-button">保存这一段</button><button id="export-transcript" class="secondary-button">导出记录</button></div>
+        </div>
+      </div>
+      <div class="section-title"><h2>已保存片段</h2><span id="transcript-count" class="muted-tag"></span></div>
+      <div id="transcript-list" class="stack-list"></div>
+    </section>
+
+    <section class="view" id="view-summary" aria-labelledby="summary-heading" hidden>
+      <div class="view-heading"><div><p class="eyebrow">03 / MAKE IT YOURS</p><h1 id="summary-heading">课堂总结，知识留下来。</h1></div><button id="export-summaries" class="secondary-button">导出总结</button></div>
+      <div class="note-layout">
+        <div class="panel note-editor">
+          <div class="panel-top"><span class="overline">新建笔记</span><span class="muted-tag">保存在当前浏览器</span></div>
+          <div class="inline-fields"><label class="field">课程<input id="note-course" placeholder="课程名称"></label><label class="field">日期<input id="note-date" type="date"></label></div>
+          <label class="field">资料类型<select id="note-kind"><option value="老师讲授">老师讲授 / 转录</option><option value="我的笔记">我的笔记</option><option value="讲义文字">讲义文字</option><option value="AI 补充解释">AI 补充解释</option><option value="不确定内容">不确定内容</option></select></label>
+          <label class="field">原始内容<textarea id="note-source" rows="9" placeholder="粘贴转录、讲义或自己的笔记。可用“12:34”“第 5 页”等标注来源位置，每个段落独立成行。"></textarea></label>
+          <label class="field pptx-import">导入 PPTX 课件<input id="import-pptx" type="file" accept=".pptx,application/vnd.openxmlformats-officedocument.presentationml.presentation"><span>仅在当前浏览器提取幻灯片文字和页码；原始 PPTX 文件不会上传或保存到网站。</span></label>
+          <div class="button-row"><button id="outline-note" class="secondary-button">从原文整理提纲</button><button id="save-note" class="primary-button">保存笔记</button></div>
+          <p class="fine-print">提纲只抽取原文片段，不补写知识、作业或截止日期。AI 总结服务尚未接入。</p>
+        </div>
+        <div class="panel source-panel">
+          <div class="panel-top"><span class="overline">原文与提纲</span><span class="muted-tag">可回看来源</span></div>
+          <div id="outline-preview" class="outline-preview"><p class="empty-copy">粘贴原文后点击“从原文整理提纲”。</p></div>
+        </div>
+      </div>
+      <div class="section-title"><h2>已保存总结</h2><span id="note-count" class="muted-tag"></span></div><div id="note-list" class="stack-list"></div>
+    </section>
+
+    <section class="view" id="view-notes" aria-labelledby="manual-notes-heading" hidden>
+      <div class="view-heading"><div><p class="eyebrow">04 / PERSONAL NOTES</p><h1 id="manual-notes-heading">课堂笔记<span class="gold-dot">.</span></h1></div><button id="export-manual-notes" class="secondary-button">导出笔记</button></div>
+      <div class="two-column narrow-form">
+        <div class="panel"><span class="overline">记录所学</span><div class="inline-fields"><label class="field">课程<input id="manual-note-course" placeholder="课程名称"></label><label class="field">日期<input id="manual-note-date" type="date"></label></div><label class="field">内容类型<select id="manual-note-kind"><option>我的笔记</option><option>老师讲授</option><option>讲义文字</option><option>AI 补充解释</option><option>不确定内容</option></select></label><label class="field">笔记内容<textarea id="manual-note-text" rows="9" placeholder="记录真实课堂内容；有时间戳或页码时一并写下。"></textarea></label><button id="save-manual-note" class="primary-button">保存笔记</button></div>
+        <div class="panel"><span class="overline">使用说明</span><h2>内容和来源分开记录</h2><p class="body-copy">选择内容类型，保留课堂原话、讲义页码或录音时间戳。无法确认的内容选“不确定内容”；需要额外解释时可单独记录，避免混成老师原话。</p><p class="body-copy">这台设备上的笔记只保存在当前浏览器。电脑与手机暂不会自动同步，可导出备份后手动导入。</p></div>
+      </div>
+      <div class="section-title"><h2>我的笔记</h2><span id="manual-note-count" class="muted-tag"></span></div><div id="manual-note-list" class="stack-list"></div>
+    </section>
+
+    <section class="view" id="view-glossary" aria-labelledby="glossary-heading" hidden>
+      <div class="view-heading"><div><p class="eyebrow">GLOSSARY</p><h1 id="glossary-heading">术语库<span class="gold-dot">.</span></h1></div><button id="export-glossary" class="secondary-button">导出术语</button></div>
+      <div class="two-column narrow-form">
+        <div class="panel"><span class="overline">新增术语</span><label class="field">英文术语<input id="term-en" placeholder="English term"></label><label class="field">中文解释<input id="term-zh" placeholder="用自己的话解释"></label><label class="field">课程 / 来源<input id="term-course" placeholder="课程、页码或时间戳（可选）"></label><button id="add-term" class="primary-button">保存术语</button></div>
+        <div class="panel"><span class="overline">查找术语</span><label class="field">搜索<input id="term-search" type="search" placeholder="输入英文、中文或课程"></label><p class="body-copy">专业术语首次出现时保留英文。术语内容由你从课堂材料录入，不预填未经核对的定义。</p></div>
+      </div>
+      <div class="section-title"><h2>已存术语</h2><span id="term-count" class="muted-tag"></span></div><div id="term-list" class="term-grid"></div>
+    </section>
+
+    <section class="view" id="view-plan" aria-labelledby="plan-heading" hidden>
+      <div class="view-heading"><div><p class="eyebrow">STUDY PLAN</p><h1 id="plan-heading">学习安排<span class="gold-dot">.</span></h1></div><button id="export-all" class="secondary-button">导出全部数据</button></div>
+      <div class="two-column narrow-form">
+        <div class="panel"><span class="overline">添加学习事项</span><label class="field">课程<input id="task-course" placeholder="课程名称"></label><label class="field">要做的事<input id="task-title" placeholder="根据真实课堂要求填写"></label><label class="field">日期（可选）<input id="task-date" type="date"></label><label class="field">依据（可选）<input id="task-source" placeholder="讲义页码、课堂时间或老师原话"></label><button id="add-task" class="primary-button">加入清单</button></div>
+        <div class="panel"><span class="overline">数据与同步</span><h2>这台设备上的学习记录</h2><p class="body-copy">笔记、术语、清单和手动录入的课程只保存在当前浏览器。换电脑、换浏览器或用手机打开，不会自动同步。</p><p class="body-copy">定期导出 JSON 备份；需要恢复时可在这里导入。</p><div class="button-row"><label class="secondary-button file-button">导入备份<input id="import-all" type="file" accept="application/json,.json" hidden></label><button id="clear-data" class="ghost-button">清空本机记录</button></div></div>
+      </div>
+      <div class="section-title"><h2>学习清单</h2><span id="task-count" class="muted-tag"></span></div><div id="task-list" class="stack-list"></div>
+    </section>
+  </main>
+
+  <footer class="footer"><span>课程study · AI 2601</span><span>依据原始课表日期展示；个人记录只保存在当前浏览器。</span></footer>
+
+  <dialog id="course-dialog" class="modal"><form method="dialog" class="modal-form"><div class="modal-head"><div><span class="overline">课程详情</span><h2 id="course-dialog-title">课程</h2></div><button class="icon-button" value="cancel" aria-label="关闭">×</button></div><div id="course-dialog-body"></div><div class="button-row"><button class="secondary-button" value="cancel">关闭</button></div></form></dialog>
+  <dialog id="add-dialog" class="modal"><form id="course-form" class="modal-form"><div class="modal-head"><div><span class="overline">手动录入 · 待核对</span><h2>记录一节课</h2></div><button type="button" class="icon-button close-dialog" aria-label="关闭">×</button></div><p class="body-copy">仅记录你明确知道的安排，保存后会标为“待核对”。</p><label class="field">日期<input name="date" type="date" required></label><div class="inline-fields"><label class="field">开始节次<select name="startPeriod"></select></label><label class="field">结束节次<select name="endPeriod"></select></label></div><label class="field">课程<input name="title" required></label><div class="inline-fields"><label class="field">老师<input name="teacher" placeholder="不确定可留空"></label><label class="field">地点<input name="room" placeholder="不确定可留空"></label></div><label class="field">类别<select name="category"><option value="major">专业课</option><option value="general">其他课程</option></select></label><div class="button-row"><button type="button" class="secondary-button close-dialog">取消</button><button type="submit" class="primary-button">保存记录</button></div></form></dialog>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+</body>
+</html>
